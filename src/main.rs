@@ -3,6 +3,10 @@
 extern crate rocket;
 use reqwest;
 use rocket::State;
+use rust_decimal::prelude::*;
+use serde::Deserialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 // define the env vars we're looking for once here as we'll reference
 // them in several places later.
@@ -30,15 +34,48 @@ fn make_url(api_token: &str, symbol: &str) -> String {
 }
 
 // https://stackoverflow.com/a/58234247
+#[derive(Debug, Deserialize)]
+struct StockData {
+    #[serde(rename = "4. close")]
+    close: String,
+}
 
+// use a BTreeeMap to preserve ordering we recieved from upstream API
+#[derive(Debug, Deserialize)]
+struct APIResponse {
+    #[serde(rename = "Time Series (Daily)")]
+    result: BTreeMap<String, StockData>,
+}
 
 #[get("/")]
 fn index(config: State<Config>) -> String {
     let url = make_url(&config.api_token, &config.symbol);
-    if let Ok(res) = reqwest::blocking::get(&url) {
-        "success".to_string()
-    } else {
-        "err :(".to_string()
+    match reqwest::blocking::get(&url) {
+        Ok(res) => {
+            let val: Value = serde_json::from_str(&res.text().unwrap()).unwrap();
+            let api_response: APIResponse = serde_json::from_value(val).unwrap();
+            let mut recent: Vec<&str> = Vec::new();
+
+            // reverse result to order from most recent to oldest dates.
+            for (_, v) in api_response.result.iter().rev().take(config.ndays) {
+                recent.push(&v.close);
+            }
+
+            // use Decimal instead of f64 since we're dealing with financial data
+            let average: Decimal = recent
+                .iter()
+                .map(|x| Decimal::from_str(x).unwrap())
+                .sum::<Decimal>()
+                / Decimal::from(recent.len());
+
+            format!(
+                "{} data=[{}], average={}",
+                config.symbol,
+                recent.join(", "),
+                average
+            )
+        }
+        Err(_) => "err :(".to_string(),
     }
 }
 
