@@ -11,9 +11,7 @@ from troposphere.ec2 import (
     Subnet,
     Route,
     RouteTable,
-    NatGateway,
     InternetGateway,
-    EIP,
     VPCGatewayAttachment,
     Instance,
     SubnetRouteTableAssociation,
@@ -111,7 +109,10 @@ instance_role_resource = t.add_resource(
     Role(
         "instanceRole",
         RoleName="k8sClusterRole",
-        ManagedPolicyArns=["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"],
+        ManagedPolicyArns=[
+            "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+            "arn:aws:iam::aws:policy/SecretsManagerReadWrite",  # not least privilege but it'll work for now
+        ],
         AssumeRolePolicyDocument=PolicyDocument(
             Statement=[
                 Statement(
@@ -155,8 +156,16 @@ ec2_instance_resource = t.add_resource(
 t.add_output(
     Output(
         "serviceURL",
-        Description="url for the stonks service",
+        Description="url for the stonks service.",
         Value=Sub("http://${IP}:30007", IP=GetAtt(ec2_instance_resource, "PublicIp")),
+    )
+)
+
+t.add_output(
+    Output(
+        "clusterInstanceId",
+        Description="instance ID for the k8s cluster",
+        Value=Ref(ec2_instance_resource),
     )
 )
 

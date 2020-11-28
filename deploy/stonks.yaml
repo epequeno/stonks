@@ -1,3 +1,19 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: stonks-api-key
+type: Opaque
+data:
+  key: "demo"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stonks-config
+data:
+  symbol: "MSFT"
+  ndays: "5"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -25,11 +41,20 @@ spec:
         resources: {}
         env:
           - name: SYMBOL
-            value: "MSFT"
+            valueFrom:
+              configMapKeyRef:
+                name: stonks-config
+                key: symbol
           - name: NDAYS
-            value: "5"
+            valueFrom:
+              configMapKeyRef:
+                name: stonks-config
+                key: ndays
           - name: APIKEY
-            value: "abc123"
+            valueFrom:
+              secretKeyRef:
+                name: stonks-api-key
+                key: key
 status: {}
 ---
 apiVersion: v1

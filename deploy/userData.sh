@@ -19,16 +19,19 @@ chmod +x "${INSTALL_DIR}/minikube"
 
 minikube start --driver=none
 
-# give the cluster some time to start up
-sleep 60
-
 # userData is run under / and so the `root` users configuration is incorrect. The following steps apply a
 # correct configuration for the user so subsequent steps (installing the application) can proceed.
 # also see: https://github.com/kubernetes/minikube/issues/8363#issuecomment-637892712
 rm -rf /root/.kube /root/.minikube
 mv /.kube /.minikube /root
-sed -i 's|\.minikube|\.\./\.minikube|g' /root/.kube/config
+# replace references to .minikube/ to /root/.minikube in kube config
+sed -i 's|\.minikube|/root/\.minikube|g' /root/.kube/config
 cd /root || exit
-kubectl apply -f https://raw.githubusercontent.com/epequeno/stonks/master/deploy/stonks.yaml
+
+# set up stonks application
+APIKEY=$(echo -n "$(aws --region us-east-1 secretsmanager get-secret-value --secret-id stonks-api-key --query 'SecretString')" | base64)
+wget https://raw.githubusercontent.com/epequeno/stonks/master/deploy/stonks.yaml
+sed -i "s/key: \"demo\"/key: ${APIKEY}/" stonks.yaml
+kubectl apply -f stonks.yaml
 
 echo "UserData script complete!"
