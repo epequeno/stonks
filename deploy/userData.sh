@@ -26,12 +26,15 @@ rm -rf /root/.kube /root/.minikube
 mv /.kube /.minikube /root
 # replace references to .minikube/ to /root/.minikube in kube config
 sed -i 's|\.minikube|/root/\.minikube|g' /root/.kube/config
-cd /root || exit
 
 # set up stonks application
+cd /root || exit
 APIKEY=$(echo -n "$(aws --region us-east-1 secretsmanager get-secret-value --secret-id stonks-api-key --query 'SecretString')" | base64)
 wget https://raw.githubusercontent.com/epequeno/stonks/master/deploy/stonks.yaml
 sed -i "s/key: \"demo\"/key: ${APIKEY}/" stonks.yaml
 kubectl apply -f stonks.yaml
+# remove the manifest since it contains the b64 encoded secret; we could avoid a write to disk by streaming from github
+# to sed then to k8s all at once.
+rm stonks.yaml
 
 echo "UserData script complete!"

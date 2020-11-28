@@ -12,7 +12,7 @@ metadata:
   name: stonks-config
 data:
   symbol: "MSFT"
-  ndays: "5"
+  ndays: "7"
 ---
 apiVersion: apps/v1
 kind: Deployment
