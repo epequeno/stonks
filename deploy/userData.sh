@@ -17,9 +17,18 @@ curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-
 cp minikube-linux-amd64 "${INSTALL_DIR}/minikube"
 chmod +x "${INSTALL_DIR}/minikube"
 
-echo "whoami"
-echo whoami
-cd /root
 minikube start --driver=none
+
+# give the cluster some time to start up
+sleep 60
+
+# userData is run under / and so the `root` users configuration is incorrect. The following steps apply a
+# correct configuration for the user so subsequent steps (installing the application) can proceed.
+# also see: https://github.com/kubernetes/minikube/issues/8363#issuecomment-637892712
+rm -rf /root/.kube /root/.minikube
+mv /.kube /.minikube /root
+sed -i 's|\.minikube|\.\./\.minikube|g' /root/.kube/config
+cd /root || exit
+kubectl apply -f https://raw.githubusercontent.com/epequeno/stonks/master/deploy/stonks.yaml
 
 echo "UserData script complete!"
