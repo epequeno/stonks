@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: stonks
+  name: stonks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stonks
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: stonks
+    spec:
+      containers:
+      - image: docker.io/epequeno/stonks
+        name: stonks
+        ports:
+          - containerPort: 8000
+        resources: {}
+        env:
+          - name: SYMBOL
+            value: "MSFT"
+          - name: NDAYS
+            value: "5"
+          - name: APIKEY
+            value: "abc123"
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stonks
+spec:
+  type: NodePort
+  selector:
+    app: stonks
+  ports:
+    - port: 8000
+      nodePort: 30007

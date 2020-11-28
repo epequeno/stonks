@@ -1,0 +1,223 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "stonks.template - deploy minikube onto an ec2 instance, then deploy stonks application into the k8s cluster.",
+    "Outputs": {
+        "serviceURL": {
+            "Description": "url for the stonks service",
+            "Value": {
+                "Fn::Sub": [
+                    "http://${IP}:30007",
+                    {
+                        "IP": {
+                            "Fn::GetAtt": [
+                                "k8sInstance",
+                                "PublicIp"
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "Resources": {
+        "IGW": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "k8s-IGW"
+                    }
+                ]
+            },
+            "Type": "AWS::EC2::InternetGateway"
+        },
+        "igwAttachment": {
+            "Properties": {
+                "InternetGatewayId": {
+                    "Ref": "IGW"
+                },
+                "VpcId": {
+                    "Ref": "vpc"
+                }
+            },
+            "Type": "AWS::EC2::VPCGatewayAttachment"
+        },
+        "instanceProfile": {
+            "Properties": {
+                "InstanceProfileName": "k8s-cluster-profile",
+                "Roles": [
+                    {
+                        "Ref": "instanceRole"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::InstanceProfile"
+        },
+        "instanceRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ec2.amazonaws.com"
+                            }
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+                ],
+                "RoleName": "k8sClusterRole"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "k8sClusterSG": {
+            "Properties": {
+                "GroupDescription": "SG for the k8s cluster",
+                "GroupName": "k8s-cluster-SG",
+                "SecurityGroupEgress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "IpProtocol": "-1"
+                    }
+                ],
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "30007",
+                        "IpProtocol": "tcp",
+                        "ToPort": "30007"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "vpc"
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "k8sInstance": {
+            "Properties": {
+                "IamInstanceProfile": {
+                    "Ref": "instanceProfile"
+                },
+                "ImageId": "ami-04d29b6f966df1537",
+                "InstanceType": "t2.medium",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "k8sClusterSG"
+                    }
+                ],
+                "SubnetId": {
+                    "Ref": "publicSubnet"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "k8s-cluster"
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "#!/bin/bash",
+                                "",
+                                "INSTALL_DIR=/usr/local/sbin",
+                                "",
+                                "# install dependencies and enable docker",
+                                "yum install docker conntrack -y",
+                                "systemctl enable docker",
+                                "systemctl start docker",
+                                "",
+                                "# install kubectl (from https://kubernetes.io/docs/tasks/tools/install-kubectl/)",
+                                "curl -LO \"https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl\"",
+                                "chmod +x ./kubectl",
+                                "mv ./kubectl \"${INSTALL_DIR}/kubectl\"",
+                                "",
+                                "# install minikube (from https://minikube.sigs.k8s.io/docs/start/)",
+                                "curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64",
+                                "cp minikube-linux-amd64 \"${INSTALL_DIR}/minikube\"",
+                                "chmod +x \"${INSTALL_DIR}/minikube\"",
+                                "",
+                                "minikube start --driver=none",
+                                "",
+                                "echo \"UserData script complete!\""
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::EC2::Instance"
+        },
+        "publicRoute": {
+            "Properties": {
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "IGW"
+                },
+                "RouteTableId": {
+                    "Ref": "publicRouteTable"
+                }
+            },
+            "Type": "AWS::EC2::Route"
+        },
+        "publicRouteTable": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "k8s-public-RouteTable"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "vpc"
+                }
+            },
+            "Type": "AWS::EC2::RouteTable"
+        },
+        "publicSubnet": {
+            "Properties": {
+                "CidrBlock": "10.0.1.0/20",
+                "MapPublicIpOnLaunch": "true",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "k8s-public-subnet"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "vpc"
+                }
+            },
+            "Type": "AWS::EC2::Subnet"
+        },
+        "publicSubnetAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "publicRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "publicSubnet"
+                }
+            },
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        },
+        "vpc": {
+            "Properties": {
+                "CidrBlock": "10.0.0.0/16",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "k8s-VPC"
+                    }
+                ]
+            },
+            "Type": "AWS::EC2::VPC"
+        }
+    }
+}
